@@ -1,0 +1,46 @@
+[package]
+name    = "eagle_image"
+version = "1.0.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi        = { version = "3", default-features = false, features = ["napi3"] }
+napi-derive = { version = "3", default-features = false }
+
+# Decoders only for the formats a comic archive can actually contain.
+# Every one of these is pure Rust: zune-jpeg, png, gif, image-webp.
+image = { version = "0.25", default-features = false, features = [
+  "jpeg",
+  "png",
+  "gif",
+  "bmp",
+  "webp",
+] }
+
+# The same resampler the upstream addon uses, so Lanczos3 output is unchanged.
+fast_image_resize = "6"
+
+[target.'cfg(not(all(target_os = "macos", target_arch = "x86_64")))'.dependencies]
+libwebp-sys = { version = "0.14", default-features = false, features = ["std", "parallel", "avx2", "sse41", "neon"] }
+
+# The x86_64 macOS runner needs bindgen; every other target uses the vendored bindings.
+[target.'cfg(all(target_os = "macos", target_arch = "x86_64"))'.dependencies]
+libwebp-sys = { version = "0.14", default-features = false, features = ["std", "parallel", "generate-bindings"] }
+
+[build-dependencies]
+napi-build = "2"
+
+[profile.release]
+codegen-units = 1
+lto           = "fat"
+opt-level     = 3
+strip         = "symbols"
+# Note: `panic = "abort"` is deliberately NOT set. napi-rs converts a Rust panic
+# into a thrown JS Error via catch_unwind, which only works while unwinding is
+# enabled. With abort, a malformed page that panicked inside a decoder would
+# take Eagle's whole renderer process down instead of failing that one render.

@@ -1,0 +1,99 @@
+name: build
+
+# Binaries are built on native runners, one per target. Nothing is
+# cross-compiled and nothing is built on a developer machine, so the artifact
+# a user installs corresponds to a commit anyone can inspect.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: eagle-image.win32-x64-msvc.node
+            built: eagle_image.dll
+          - os: macos-13           # Intel runner
+            target: x86_64-apple-darwin
+            artifact: eagle-image.darwin-x64.node
+            built: libeagle_image.dylib
+          - os: macos-14           # Apple silicon runner
+            target: aarch64-apple-darwin
+            artifact: eagle-image.darwin-arm64.node
+            built: libeagle_image.dylib
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: eagle-image.linux-x64-gnu.node
+            built: libeagle_image.so
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      # libwebp-sys asks bindgen to regenerate its bindings on this one target,
+      # and bindgen needs to find libclang.
+      - name: Provide libclang for the Intel macOS build
+        if: matrix.os == 'macos-13'
+        run: |
+          brew install llvm
+          echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Name the artifact as a Node addon
+        shell: bash
+        run: cp "target/${{ matrix.target }}/release/${{ matrix.built }}" "${{ matrix.artifact }}"
+
+      # Proves the binary loads and produces a correct image on the platform it
+      # was built for, rather than only that it compiled.
+      - name: Smoke test
+        shell: bash
+        run: node scripts/smoke.js "${{ matrix.artifact }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  bundle:
+    name: bundle
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: staging
+          merge-multiple: true
+
+      # The exact folder to drop into the plugin's node_modules.
+      - name: Assemble the drop-in package
+        run: |
+          mkdir -p eagle-image
+          cp index.js index.d.ts package.json eagle-image/
+          cp staging/*.node eagle-image/
+          ls -la eagle-image
+          sha256sum eagle-image/*.node | tee eagle-image/SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eagle-image-package
+          path: eagle-image
+          if-no-files-found: error

@@ -1,0 +1,13 @@
+{
+  "name": "eagle-image",
+  "version": "1.0.0",
+  "description": "Minimal decode/resize/encode addon for the Eagle CBZ reader plugin",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "MIT",
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "*.node"
+  ]
+}
