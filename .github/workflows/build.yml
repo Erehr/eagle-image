@@ -5,7 +5,7 @@ name: build
 # a user installs corresponds to a commit anyone can inspect.
 on:
   push:
-    branches: [main]
+    branches: [main, master]      # whichever your default branch happens to be
     tags: ['v*']
   workflow_dispatch:
 
@@ -46,12 +46,14 @@ jobs:
           key: ${{ matrix.target }}
 
       # libwebp-sys asks bindgen to regenerate its bindings on this one target,
-      # and bindgen needs to find libclang.
-      - name: Provide libclang for the Intel macOS build
+      # and bindgen needs libclang. Xcode already ships one, so point at that
+      # rather than spending several minutes on `brew install llvm`.
+      # If bindgen ever fails to find it, the brew line below is the fallback.
+      - name: Point bindgen at Xcode's libclang (Intel macOS)
         if: matrix.os == 'macos-13'
         run: |
-          brew install llvm
-          echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib" >> "$GITHUB_ENV"
+          # brew install llvm && echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> "$GITHUB_ENV"
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
@@ -97,3 +99,26 @@ jobs:
           name: eagle-image-package
           path: eagle-image
           if-no-files-found: error
+
+  release:
+    name: release
+    needs: bundle
+    # Only for tags. Artifacts from an ordinary push live on the run page and
+    # expire; a release asset is permanent and has a stable URL.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: eagle-image-package
+          path: eagle-image
+
+      - name: Zip the drop-in folder
+        run: zip -r eagle-image-${{ github.ref_name }}.zip eagle-image
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: eagle-image-${{ github.ref_name }}.zip
+          generate_release_notes: true

@@ -12,7 +12,19 @@ const lib = require(require('path').resolve(process.argv[2]));
 
 // A 64x64 PNG built here rather than committed, so the test has no fixtures.
 function png(w, h) {
-    const crcOf = b => { const o = Buffer.alloc(4); o.writeUInt32BE(zlib.crc32(b) >>> 0); return o; };
+    // Self-contained CRC32 rather than zlib.crc32, which only exists from Node
+    // 20.15 / 22.2. This runs on whatever Node a CI runner happens to ship, and
+    // a smoke test that fails to start tells you nothing about the binary.
+    const crcOf = b => {
+        let c = 0xFFFFFFFF;
+        for (let i = 0; i < b.length; i++) {
+            c ^= b[i];
+            for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xEDB88320 & -(c & 1));
+        }
+        const o = Buffer.alloc(4);
+        o.writeUInt32BE((c ^ 0xFFFFFFFF) >>> 0);
+        return o;
+    };
     const chunk = (type, data) => {
         const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
         const td = Buffer.concat([Buffer.from(type), data]);
