@@ -29,13 +29,9 @@ jobs:
             target: aarch64-apple-darwin
             artifact: eagle-image.darwin-arm64.node
             built: libeagle_image.dylib
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact: eagle-image.linux-x64-gnu.node
-            built: libeagle_image.so
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -68,7 +64,7 @@ jobs:
         shell: bash
         run: node scripts/smoke.js "${{ matrix.artifact }}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
@@ -79,9 +75,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v8
         with:
+          pattern: 'eagle-image.*.node'
           path: staging
           merge-multiple: true
 
@@ -94,7 +91,7 @@ jobs:
           ls -la eagle-image
           sha256sum eagle-image/*.node | tee eagle-image/SHA256SUMS.txt
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: eagle-image-package
           path: eagle-image
@@ -110,7 +107,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: eagle-image-package
           path: eagle-image
@@ -118,7 +115,50 @@ jobs:
       - name: Zip the drop-in folder
         run: zip -r eagle-image-${{ github.ref_name }}.zip eagle-image
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: eagle-image-${{ github.ref_name }}.zip
           generate_release_notes: true
+
+  wasm:
+    name: wasm + benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm
+
+      - name: Install wasm-pack
+        run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+
+      # simd128 is what makes this worth measuring: fast_image_resize ships
+      # hand-written wasm SIMD kernels for exactly the u8x3/u8x4 paths this
+      # code uses, and without the flag they are compiled out to scalar.
+      - name: Build wasm
+        env:
+          RUSTFLAGS: '-C target-feature=+simd128'
+        run: wasm-pack build --release --target nodejs --out-dir pkg
+
+      - name: Report wasm size
+        run: ls -la pkg/*.wasm && du -h pkg/*.wasm
+
+      # The native build, on the same runner, so the comparison is one CPU.
+      - name: Build native for comparison
+        run: |
+          cargo build --release
+          cp target/release/libeagle_image.so eagle-image.linux-x64-gnu.node
+
+      - name: Native vs wasm
+        run: node scripts/wasm-bench.js eagle-image.linux-x64-gnu.node pkg/eagle_image.js
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: eagle-image-wasm
+          path: pkg
+          if-no-files-found: error

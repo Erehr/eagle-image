@@ -1,7 +1,9 @@
 target/
+pkg/
 bench/node_modules/
 bench/*.ppm
 bench/*.jpg
 bench/*.png
 bench/*.webp
 *.node
+*.wasm

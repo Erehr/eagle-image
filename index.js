@@ -8,6 +8,10 @@
 const { existsSync } = require('fs');
 const { join } = require('path');
 
+// Eagle ships for Windows and macOS only, so those are the binaries the
+// released package contains. The linux entry is kept for local development and
+// for CI's own benchmark; if the file is absent the lookup below says so
+// plainly rather than failing somewhere further in.
 const BINARIES = {
     'win32-x64': 'eagle-image.win32-x64-msvc.node',
     'darwin-x64': 'eagle-image.darwin-x64.node',

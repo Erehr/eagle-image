@@ -9,8 +9,6 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-napi        = { version = "3", default-features = false, features = ["napi3"] }
-napi-derive = { version = "3", default-features = false }
 
 # Decoders only for the formats a comic archive can actually contain.
 # Every one of these is pure Rust: zune-jpeg, png, gif, image-webp.
@@ -24,6 +22,20 @@ image = { version = "0.25", default-features = false, features = [
 
 # The same resampler the upstream addon uses, so Lanczos3 output is unchanged.
 fast_image_resize = "6"
+# Reduced-IDCT JPEG decoding: decode a 4000px page straight to 2000px rather
+# than decoding in full and throwing most of it away.
+jpeg-decoder      = "0.3"
+
+# ── Native addon ──────────────────────────────────────────────────────────
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+napi        = { version = "3", default-features = false, features = ["napi3"] }
+napi-derive = { version = "3", default-features = false }
+
+# ── WebAssembly ───────────────────────────────────────────────────────────
+# No napi, and no libwebp: the wasm build contains no C and no executable code
+# an antivirus heuristic scans.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
 
 [target.'cfg(not(all(target_os = "macos", target_arch = "x86_64")))'.dependencies]
 libwebp-sys = { version = "0.14", default-features = false, features = ["std", "parallel", "avx2", "sse41", "neon"] }
@@ -32,8 +44,11 @@ libwebp-sys = { version = "0.14", default-features = false, features = ["std", "
 [target.'cfg(all(target_os = "macos", target_arch = "x86_64"))'.dependencies]
 libwebp-sys = { version = "0.14", default-features = false, features = ["std", "parallel", "generate-bindings"] }
 
-[build-dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.build-dependencies]
 napi-build = "2"
+
+[target.'cfg(target_os = "windows")'.build-dependencies]
+winres = "0.1"
 
 [profile.release]
 codegen-units = 1
