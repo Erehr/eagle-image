@@ -13,6 +13,7 @@ jobs:
   build:
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -21,7 +22,7 @@ jobs:
             target: x86_64-pc-windows-msvc
             artifact: eagle-image.win32-x64-msvc.node
             built: eagle_image.dll
-          - os: macos-13           # Intel runner
+          - os: macos-15-intel     # Intel runner; macos-13 was retired 2025-12-04
             target: x86_64-apple-darwin
             artifact: eagle-image.darwin-x64.node
             built: libeagle_image.dylib
@@ -46,7 +47,7 @@ jobs:
       # rather than spending several minutes on `brew install llvm`.
       # If bindgen ever fails to find it, the brew line below is the fallback.
       - name: Point bindgen at Xcode's libclang (Intel macOS)
-        if: matrix.os == 'macos-13'
+        if: matrix.os == 'macos-15-intel'
         run: |
           echo "LIBCLANG_PATH=$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib" >> "$GITHUB_ENV"
           # brew install llvm && echo "LIBCLANG_PATH=$(brew --prefix llvm)/lib" >> "$GITHUB_ENV"
@@ -123,6 +124,7 @@ jobs:
   wasm:
     name: wasm + benchmark
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
 

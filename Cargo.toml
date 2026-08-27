@@ -22,9 +22,14 @@ image = { version = "0.25", default-features = false, features = [
 
 # The same resampler the upstream addon uses, so Lanczos3 output is unchanged.
 fast_image_resize = "6"
+
 # Reduced-IDCT JPEG decoding: decode a 4000px page straight to 2000px rather
-# than decoding in full and throwing most of it away.
-jpeg-decoder      = "0.3"
+# than decoding in full and discarding most of it.
+#
+# default-features = false drops rayon. It is declared once rather than per
+# target because Cargo unifies features across target sections of the same
+# crate, so a wasm-only `default-features = false` does not reliably win.
+jpeg-decoder = { version = "0.3", default-features = false }
 
 # ── Native addon ──────────────────────────────────────────────────────────
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -37,14 +42,18 @@ napi-derive = { version = "3", default-features = false }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
 
-[target.'cfg(not(all(target_os = "macos", target_arch = "x86_64")))'.dependencies]
+# libwebp is C. On wasm32 `target_os` is "unknown", so a gate that only
+# excludes macOS-x86_64 lets it through and the wasm build tries to compile a C
+# library for a target with no C toolchain. The wasm exclusion has to be
+# explicit.
+[target.'cfg(all(not(target_arch = "wasm32"), not(all(target_os = "macos", target_arch = "x86_64"))))'.dependencies]
 libwebp-sys = { version = "0.14", default-features = false, features = ["std", "parallel", "avx2", "sse41", "neon"] }
 
 # The x86_64 macOS runner needs bindgen; every other target uses the vendored bindings.
 [target.'cfg(all(target_os = "macos", target_arch = "x86_64"))'.dependencies]
 libwebp-sys = { version = "0.14", default-features = false, features = ["std", "parallel", "generate-bindings"] }
 
-[target.'cfg(not(target_arch = "wasm32"))'.build-dependencies]
+[build-dependencies]
 napi-build = "2"
 
 [target.'cfg(target_os = "windows")'.build-dependencies]
